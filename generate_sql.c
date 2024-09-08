@@ -65,43 +65,66 @@ void write_complete_transaction(Account * account, const int commit_limit, int *
     }
 }
 
-void parse_tag(const char *tag, const char *value, Account *account, const int commit_limit, int * commit_count)
+void parse_tag(const char *tag, int len, const char *value, Account *account, const int commit_limit, int * commit_count)
 {
     if (strcmp(tag, "NA") == 0) {
             write_complete_transaction(account, commit_limit, commit_count);
-            strncpy(account->account_no, value, 24);
+            strncpy(account->account_no, value, len);
+            if (len <= 24)
+            {
+                account->account_no[len] = '\0';
+            }
+            else
+            {
+                account->account_no[24] = '\0';
+            }
         } else if (strcmp(tag, "AB") == 0) {
-            strncpy(account->avail_bal, value, 12);
+            strncpy(account->avail_bal, value, len);
+            if (len <= 12)
+            {
+                account->avail_bal[len] = '\0';
+            }
+            else
+            {
+                account->avail_bal[12] = '\0';
+            }
         } else if (strcmp(tag, "LB") == 0) {
-            strncpy(account->ledger_bal, value, 12);
+            strncpy(account->ledger_bal, value, len);
+            if (len <= 12)
+            {
+                account->ledger_bal[len] = '\0';
+            }
+            else
+            {
+                account->ledger_bal[12] = '\0';
+            }
         } else if (strcmp(tag, "UT") == 0) {
-            strncpy(account->upd_date, value, 4); // Copy YYYY
-            strncpy(account->upd_date + 4, value + 5, 2); // Copy MM
-            strncpy(account->upd_date + 6, value + 8, 2); // Copy DD
-            account->upd_date[8] = '\0';
-
-            strncpy(account->upd_time, value + 11, 2); // Copy HH
-            strncpy(account->upd_time + 2, value + 14, 2); // Copy MM
-            strncpy(account->upd_time + 4, value + 17, 2); // Copy SS
-            account->upd_time[6] = '\0';
+             sscanf(value, "%4s-%2s-%2s %2s:%2s:%2s", 
+                account->upd_date, account->upd_date + 4, account->upd_date + 6,
+                account->upd_time, account->upd_time + 2, account->upd_time + 4);
         }
 }
 
-void parse(char* pos, Account* account, const int commit_limit, int * commit_count) {
-    while (*pos) {
+void parse(char** pos, Account* account, const int commit_limit, int * commit_count) {
+    while (**pos) {
         char tag[TAG_LEN + 1] = {0};
         char len_str[LENGTH_LEN + 1] = {0};
-        strncpy(tag, pos, TAG_LEN);
-        pos += TAG_LEN;
-        strncpy(len_str, pos, LENGTH_LEN);
-        pos += LENGTH_LEN;
+        strncpy(tag, *pos, TAG_LEN);
+        (*pos) += TAG_LEN;
+        strncpy(len_str, *pos, LENGTH_LEN);
+        (*pos) += LENGTH_LEN;
         int len = atoi(len_str);
 
+        if (len < 0 || len > strlen(*pos)) {
+            fprintf(stderr, "Invalid length encountered.\n");
+            break;
+        }
+
         // The value starts at 'pos' and spans 'len' characters
-        parse_tag(tag, pos, account, commit_limit, commit_count);
+        parse_tag(tag, len, *pos, account, commit_limit, commit_count);
         
         // Move pos forward by the length of the value
-        pos += len;    
+        (*pos) += len;    
     }
 }
 
@@ -131,11 +154,11 @@ int main(int argc, char *argv[]) {
         {
             pos = buffer;
         }
-        parse(pos, &account, commit_limit, &commit_count);
+        parse(&pos, &account, commit_limit, &commit_count);
     }
-    parse(pos, &account, commit_limit, &commit_count);
+    write_complete_transaction(&account, commit_limit, &commit_count);
     
-    if ((!commit_limit) || commit_count)
+    if ((!commit_limit) || (commit_limit && commit_count > 0))
     {
         // Always commit at the end for data integrity
         printf("COMMIT;\n");
